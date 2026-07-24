@@ -1,133 +1,189 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 export default function MeetingPage() {
   const [meetUrl, setMeetUrl] = useState('');
-  const [isBotEnabled, setIsBotEnabled] = useState(false);
+  const [isSessionActive, setIsSessionActive] = useState(false);
   const [status, setStatus] = useState('Idle');
   const [transcript, setTranscript] = useState('');
   const [summary, setSummary] = useState('');
+  const [actionItems, setActionItems] = useState<string[]>([]);
+  
+  const streamRef = useRef<MediaStream | null>(null);
 
-  // 1. Extension se aane wale "MEETING_ENDED" signal ko listen karne ke liye
-  useEffect(() => {
-    const handleExtensionMessage = (event: MessageEvent) => {
-      // Check if message is coming from Chrome/Edge Extension
-      if (event.data && event.data.action === "TRIGGER_AUTO_ANALYZE") {
-        triggerAutoAnalyze();
-      }
-    };
+  // Auto-analyze AI logic
+  const handleAutoAnalyze = () => {
+    setStatus('Processing & Analyzing Google Meet Audio with AI...');
+    setIsSessionActive(false);
 
-    // Chrome Extension runtime listener (Direct Communication)
-    if (typeof window !== 'undefined' && (window as any).chrome?.runtime) {
-      (window as any).chrome.runtime.onMessage?.addListener((message: any) => {
-        if (message.action === "TRIGGER_AUTO_ANALYZE") {
-          triggerAutoAnalyze();
-        }
-      });
-    }
-
-    window.addEventListener('message', handleExtensionMessage);
-    return () => window.removeEventListener('message', handleExtensionMessage);
-  }, []);
-
-  // 2. Auto-Analyze Function
-  const triggerAutoAnalyze = () => {
-    setStatus('Meeting ended! Analyzing audio & generating tasks...');
-    setIsBotEnabled(false);
-
+    // Simulated AI API Processing Delay
     setTimeout(() => {
       setTranscript(
-        "Speaker 1: Hi team, let's discuss the project update.\nSpeaker 2: Yes, we need to finalize the dashboard UI and extension integration today."
+        "Speaker 1 (Host): Welcome everyone. Today we are reviewing the AI Meet Bot architecture.\n" +
+        "Speaker 2 (Product): The goal is to provide a seamless automated task generator for Google Meet calls.\n" +
+        "Speaker 1 (Host): Excellent. Preeti will lead the deployment and GitHub pipeline."
       );
+
       setSummary(
-        "Key Tasks Allocated:\n- Finalize Extension & Dashboard Communication\n- Review Vercel deployment status"
+        "The meeting focused on validating the automated workflow for MeetAI Studio. " +
+        "The team agreed on simplifying the deployment model to run directly via web browser without external setup dependencies."
       );
+
+      setActionItems([
+        "Finalize Vercel live production link for showcase",
+        "Verify auto-trigger mechanisms on call disconnection",
+        "Prepare documentation for end-user onboarding"
+      ]);
+
       setStatus('Analysis Completed Successfully!');
-    }, 2000);
+    }, 2500);
   };
 
-  const handleToggleBot = () => {
+  // Start Session with Tab Stream
+  const handleStartSession = async () => {
     if (!meetUrl.trim()) {
-      alert('Kripya pehle Google Meet Link enter karein!');
+      alert('Kripya Google Meet URL enter karein!');
       return;
     }
 
-    if (!isBotEnabled) {
-      setIsBotEnabled(true);
-      setStatus('Bot Enabled! Waiting for you to join Google Meet...');
-    } else {
-      setIsBotEnabled(false);
-      setStatus('Bot Disabled');
+    try {
+      // Browser tab capture API (Captures ONLY the selected Google Meet tab)
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: true,
+      });
+
+      streamRef.current = stream;
+      setIsSessionActive(true);
+      setStatus('Bot Connected! AI is listening to Google Meet audio in background...');
+
+      // Auto-Detect when the user closes/leaves the Google Meet tab
+      const audioTrack = stream.getAudioTracks()[0] || stream.getVideoTracks()[0];
+      if (audioTrack) {
+        audioTrack.onended = () => {
+          console.log("Google Meet tab disconnected. Triggering auto-analysis...");
+          handleAutoAnalyze();
+        };
+      }
+    } catch (err) {
+      console.error("Stream error:", err);
+      setStatus('Session cancelled or permission denied.');
     }
   };
 
+  const handleStopSession = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+    }
+    handleAutoAnalyze();
+  };
+
   return (
-    <div style={{ padding: '30px', fontFamily: 'sans-serif', maxWidth: '800px', margin: '0 auto' }}>
-      <h2>MeetAI Studio - Auto Meeting Companion</h2>
-      <p style={{ color: '#666' }}>
-        Paste your Google Meet URL below. When enabled, the AI will automatically track the call background tab when you join, and auto-analyze when you leave.
-      </p>
+    <div style={{ padding: '40px 20px', fontFamily: 'system-ui, sans-serif', maxWidth: '850px', margin: '0 auto' }}>
+      <header style={{ marginBottom: '30px', textAlign: 'center' }}>
+        <h1 style={{ fontSize: '28px', color: '#111827', marginBottom: '8px' }}>MeetAI Studio</h1>
+        <p style={{ color: '#6b7280', fontSize: '15px' }}>
+          Automated AI Meeting Companion — Input link, join meeting, get auto-generated transcript & insights.
+        </p>
+      </header>
 
-      {/* URL Input Box */}
-      <div style={{ marginBottom: '20px', marginTop: '20px' }}>
-        <input
-          type="text"
-          placeholder="https://meet.google.com/abc-defg-hij"
-          value={meetUrl}
-          onChange={(e) => setMeetUrl(e.target.value)}
-          disabled={isBotEnabled}
-          style={{
-            width: '65%',
-            padding: '12px',
-            fontSize: '15px',
-            borderRadius: '6px',
-            border: '1px solid #ccc',
-            marginRight: '10px'
-          }}
-        />
-
-        <button
-          onClick={handleToggleBot}
-          style={{
-            padding: '12px 24px',
-            backgroundColor: isBotEnabled ? '#dc2626' : '#2563eb',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontWeight: 'bold'
-          }}
-        >
-          {isBotEnabled ? 'Disable Bot' : 'Enable Bot'}
-        </button>
+      {/* Input Section */}
+      <div style={{ backgroundColor: '#f9fafb', padding: '20px', borderRadius: '10px', border: '1px solid #e5e7eb', marginBottom: '24px' }}>
+        <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', color: '#374151' }}>
+          Google Meet URL
+        </label>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <input
+            type="text"
+            placeholder="https://meet.google.com/abc-defg-hij"
+            value={meetUrl}
+            onChange={(e) => setMeetUrl(e.target.value)}
+            disabled={isSessionActive}
+            style={{
+              flex: 1,
+              padding: '12px',
+              fontSize: '14px',
+              borderRadius: '6px',
+              border: '1px solid #d1d5db',
+              outline: 'none'
+            }}
+          />
+          {!isSessionActive ? (
+            <button
+              onClick={handleStartSession}
+              style={{
+                padding: '12px 24px',
+                backgroundColor: '#2563eb',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              Start Session
+            </button>
+          ) : (
+            <button
+              onClick={handleStopSession}
+              style={{
+                padding: '12px 24px',
+                backgroundColor: '#dc2626',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              End & Analyze
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Status Bar */}
+      {/* Status Banner */}
       <div style={{
-        padding: '12px',
-        backgroundColor: isBotEnabled ? '#e0f2fe' : '#f3f4f6',
+        padding: '14px',
+        backgroundColor: isSessionActive ? '#eff6ff' : '#f3f4f6',
         borderRadius: '6px',
-        marginBottom: '25px',
-        borderLeft: isBotEnabled ? '4px solid #0284c7' : '4px solid #9ca3af'
+        marginBottom: '30px',
+        borderLeft: isSessionActive ? '4px solid #3b82f6' : '4px solid #9ca3af',
+        color: '#1f2937',
+        fontSize: '14px'
       }}>
         <strong>Status:</strong> {status}
       </div>
 
-      {/* AI Output Section */}
-      <div style={{ display: 'flex', gap: '20px' }}>
-        <div style={{ flex: 1, border: '1px solid #e5e7eb', padding: '15px', borderRadius: '8px', minHeight: '150px' }}>
-          <h3>Captured Transcript</h3>
-          <p style={{ whiteSpace: 'pre-line', color: '#4b5563', fontSize: '14px' }}>
-            {transcript || 'No transcript captured yet. Enable bot and join meeting.'}
+      {/* Results Section */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+        {/* Transcript Box */}
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '18px', backgroundColor: '#fff' }}>
+          <h3 style={{ fontSize: '16px', color: '#111827', marginTop: 0 }}>Captured Transcript</h3>
+          <p style={{ whiteSpace: 'pre-line', color: '#4b5563', fontSize: '13px', lineHeight: '1.6' }}>
+            {transcript || 'No transcript available yet. Start session and join call.'}
           </p>
         </div>
 
-        <div style={{ flex: 1, border: '1px solid #e5e7eb', padding: '15px', borderRadius: '8px', minHeight: '150px' }}>
-          <h3>AI Summary & Action Items</h3>
-          <p style={{ whiteSpace: 'pre-line', color: '#4b5563', fontSize: '14px' }}>
-            {summary || 'No tasks generated yet.'}
-          </p>
+        {/* AI Summary Box */}
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '18px', backgroundColor: '#fff' }}>
+          <h3 style={{ fontSize: '16px', color: '#111827', marginTop: 0 }}>AI Summary & Tasks</h3>
+          {summary ? (
+            <div>
+              <p style={{ color: '#4b5563', fontSize: '13px', lineHeight: '1.5', marginBottom: '12px' }}>
+                {summary}
+              </p>
+              <strong style={{ fontSize: '13px', color: '#111827' }}>Action Items:</strong>
+              <ul style={{ paddingLeft: '18px', marginTop: '6px', fontSize: '13px', color: '#374151' }}>
+                {actionItems.map((item, index) => (
+                  <li key={index} style={{ marginBottom: '4px' }}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p style={{ color: '#4b5563', fontSize: '13px' }}>No analysis generated yet.</p>
+          )}
         </div>
       </div>
     </div>
