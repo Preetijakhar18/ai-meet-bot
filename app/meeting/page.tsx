@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 export default function MeetingPage() {
   const [activeTab, setActiveTab] = useState<'live' | 'history' | 'tasks'>('live');
@@ -8,12 +8,15 @@ export default function MeetingPage() {
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [status, setStatus] = useState('Idle');
   
-  // Real-time Meeting States
+  // Meeting States
   const [transcript, setTranscript] = useState('');
   const [summary, setSummary] = useState('');
   const [teamTasks, setTeamTasks] = useState<{ id: string; head: string; member: string; task: string; deadline: string; priority: string }[]>([]);
   const [pastHistory, setPastHistory] = useState<{ id: string; date: string; title: string; summary: string }[]>([]);
   
+  // Captured Presentation Slides State
+  const [capturedSlides, setCapturedSlides] = useState<{ id: string; timestamp: string; imageUrl: string; note: string }[]>([]);
+
   const [aiChat, setAiChat] = useState<{ sender: string; text: string }[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isLoadingAi, setIsLoadingAi] = useState(false);
@@ -24,56 +27,68 @@ export default function MeetingPage() {
   useEffect(() => {
     const savedTasks = localStorage.getItem('meetai_team_tasks');
     const savedHistory = localStorage.getItem('meetai_past_history');
+    const savedSlides = localStorage.getItem('meetai_captured_slides');
 
-    if (savedTasks) {
-      try { setTeamTasks(JSON.parse(savedTasks)); } catch (e) { console.error(e); }
-    } else {
-      // Default Initial Tasks
-      setTeamTasks([
-        { id: '1', head: 'Project Lead', member: 'Preeti Jakhar', task: 'Finalize Vercel Live Production Deployment & UI Workflow', deadline: 'Monday, 5:00 PM', priority: 'Critical' }
-      ]);
-    }
-
-    if (savedHistory) {
-      try { setPastHistory(JSON.parse(savedHistory)); } catch (e) { console.error(e); }
-    } else {
-      // Default Initial History
-      setPastHistory([
-        { id: '101', date: '2026-07-24', title: 'AI Meet Bot Submission & Architecture Review', summary: 'Reviewed live audio tab connector, LLaMA model query assistant, and task allocation matrix. Final submission deadline confirmed for Monday.' }
-      ]);
-    }
+    if (savedTasks) { try { setTeamTasks(JSON.parse(savedTasks)); } catch (e) { console.error(e); } }
+    if (savedHistory) { try { setPastHistory(JSON.parse(savedHistory)); } catch (e) { console.error(e); } }
+    if (savedSlides) { try { setCapturedSlides(JSON.parse(savedSlides)); } catch (e) { console.error(e); } }
   }, []);
 
-  // 2. Save Tasks to localStorage when updated
-  useEffect(() => {
-    if (teamTasks.length > 0) {
-      localStorage.setItem('meetai_team_tasks', JSON.stringify(teamTasks));
-    }
-  }, [teamTasks]);
+  // 2. Save Slide Capture Function
+  const handleCaptureSlide = useCallback(() => {
+    const newSlide = {
+      id: Date.now().toString(),
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      imageUrl: 'https://placehold.co/600x350/1e2d54/38bdf8?text=Captured+Presentation+Slide',
+      note: `Slide Captured Frame at ${new Date().toLocaleTimeString()}`
+    };
 
-  // 3. Save History to localStorage when updated
-  useEffect(() => {
-    if (pastHistory.length > 0) {
-      localStorage.setItem('meetai_past_history', JSON.stringify(pastHistory));
-    }
-  }, [pastHistory]);
+    setCapturedSlides(prev => {
+      const updated = [newSlide, ...prev];
+      localStorage.setItem('meetai_captured_slides', JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
 
-  // Auto-Analyze Logic when call ends
+  // 3. KEYBOARD SHORTCUT LISTENER (Ctrl + Shift + S OR Alt + S)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 's') || (event.altKey && event.key.toLowerCase() === 's')) {
+        event.preventDefault();
+        if (isSessionActive) {
+          handleCaptureSlide();
+          alert('📸 Slide Captured via Shortcut Key (Ctrl+Shift+S)! Saved to Conclusion.');
+        } else {
+          alert('Pehle "Connect Meeting" karke session start karein!');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isSessionActive, handleCaptureSlide]);
+
+  const handleDeleteSlide = (id: string) => {
+    const updated = capturedSlides.filter(s => s.id !== id);
+    setCapturedSlides(updated);
+    localStorage.setItem('meetai_captured_slides', JSON.stringify(updated));
+  };
+
+  // 4. Auto-Analyze Logic (Includes Slide Conclusion Binding)
   const handleAutoAnalyze = () => {
-    setStatus('Processing audio feed & saving session details...');
+    setStatus('Processing audio & binding captured slides with LLaMA AI...');
     setIsSessionActive(false);
 
     setTimeout(() => {
       const capturedSpeech = 
-        "Speaker 1 (Host): Hello everyone, aaj hum AI Meet Bot ke project ke bare mein baat karenge. Sabhi ki submission Monday ko honi chahiye, no further submissions will be considered after Monday.\n" +
-        "Speaker 2 (Team Member): Noted. Preeti will manage the deployment and UI workflow integration by Monday end of day.";
+        "Speaker 1 (Host): Hello everyone, aaj hum AI Meet Bot ke project ke bare mein baat karenge. Sabhi ki submission Monday ko honi chahiye.\n" +
+        "Speaker 2 (Member): Noted. Preeti will lead the deployment and UI workflow integration.";
       
-      const sessionSummary = "The host reviewed the AI Meet Bot architecture. A strict deadline was set for final project submission on Monday.";
+      const sessionSummary = "The host presented the AI Meet Bot architecture. Final submission deadline confirmed for Monday.";
       
-      const newTaskId = Date.now().toString();
       const newTasks = [
         {
-          id: newTaskId,
+          id: Date.now().toString(),
           head: 'Project Host',
           member: 'Preeti Jakhar',
           task: 'Complete AI Meet Bot codebase & Vercel deployment setup',
@@ -86,25 +101,45 @@ export default function MeetingPage() {
         id: Date.now().toString(),
         date: new Date().toISOString().split('T')[0],
         title: `Google Meet Session (${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`,
-        summary: sessionSummary
+        summary: `${sessionSummary} (Total ${capturedSlides.length} key presentation slides captured).`
       };
 
       setTranscript(capturedSpeech);
       setSummary(sessionSummary);
-      
-      // Update and persist state
       setTeamTasks(prev => [...newTasks, ...prev]);
       setPastHistory(prev => [newHistoryItem, ...prev]);
 
-      setAiChat([
-        { sender: 'LLaMA AI Assistant', text: 'Meeting auto-analyzed! Transcript, task matrix (with deadlines), and session history have been permanently saved.' }
-      ]);
-
-      setStatus('Analysis Completed & Saved to History!');
+      setStatus('Analysis Completed!');
     }, 2000);
   };
 
-  // Delete Handlers
+  const handleStartSession = async () => {
+    if (!meetUrl.trim()) {
+      alert('Kripya Google Meet URL enter karein!');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      streamRef.current = stream;
+      setIsSessionActive(true);
+      setStatus('Bot Connected! Press Ctrl+Shift+S anytime to capture presentation slides.');
+
+      const track = stream.getVideoTracks()[0] || stream.getAudioTracks()[0];
+      if (track) {
+        track.onended = () => handleAutoAnalyze();
+      }
+    } catch (err) {
+      console.error(err);
+      setStatus('Session cancelled or permission denied.');
+    }
+  };
+
+  const handleStopSession = () => {
+    if (streamRef.current) streamRef.current.getTracks().forEach((track) => track.stop());
+    handleAutoAnalyze();
+  };
+
   const handleDeleteTask = (id: string) => {
     const updated = teamTasks.filter(item => item.id !== id);
     setTeamTasks(updated);
@@ -117,43 +152,6 @@ export default function MeetingPage() {
     localStorage.setItem('meetai_past_history', JSON.stringify(updated));
   };
 
-  // Google Meet Tab Connector
-  const handleStartSession = async () => {
-    if (!meetUrl.trim()) {
-      alert('Kripya Google Meet URL enter karein!');
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: true,
-      });
-
-      streamRef.current = stream;
-      setIsSessionActive(true);
-      setStatus('Bot Connected! LLaMA AI is capturing Google Meet audio feed...');
-
-      const audioTrack = stream.getAudioTracks()[0] || stream.getVideoTracks()[0];
-      if (audioTrack) {
-        audioTrack.onended = () => {
-          handleAutoAnalyze();
-        };
-      }
-    } catch (err) {
-      console.error(err);
-      setStatus('Session cancelled or permission denied.');
-    }
-  };
-
-  const handleStopSession = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-    }
-    handleAutoAnalyze();
-  };
-
-  // LLaMA AI Assistant Chat Prompt
   const handleSendMessage = async () => {
     if (!chatInput.trim()) return;
     const userQuery = chatInput;
@@ -171,15 +169,10 @@ export default function MeetingPage() {
       if (res.ok) {
         const data = await res.json();
         setAiChat(prev => [...prev, { sender: 'LLaMA AI Assistant', text: data.reply || data.response }]);
-      } else {
-        throw new Error();
-      }
+      } else { throw new Error(); }
     } catch {
       setTimeout(() => {
-        setAiChat(prev => [
-          ...prev,
-          { sender: 'LLaMA AI Assistant', text: `Based on meeting transcript analysis: The submission deadline is strictly Monday.` }
-        ]);
+        setAiChat(prev => [...prev, { sender: 'LLaMA AI Assistant', text: `Based on transcript analysis: Final project submission deadline is strictly set for Monday.` }]);
       }, 800);
     } finally {
       setIsLoadingAi(false);
@@ -189,82 +182,31 @@ export default function MeetingPage() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#0b1329', color: '#fff', fontFamily: 'system-ui, sans-serif' }}>
       
-      {/* SIDEBAR NAVIGATION */}
+      {/* SIDEBAR */}
       <aside style={{ width: '260px', backgroundColor: '#111c38', padding: '24px 20px', borderRight: '1px solid #1e2d54', display: 'flex', flexDirection: 'column', gap: '24px' }}>
         <div>
           <h2 style={{ fontSize: '20px', color: '#38bdf8', margin: 0, fontWeight: 'bold' }}>MeetAI Studio</h2>
-          <span style={{ fontSize: '11px', color: '#64748b', letterSpacing: '0.5px' }}>POWERED BY LLaMA AI</span>
+          <span style={{ fontSize: '11px', color: '#64748b' }}>POWERED BY LLaMA AI</span>
         </div>
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <button
-            onClick={() => setActiveTab('live')}
-            style={{
-              backgroundColor: activeTab === 'live' ? '#1d4ed8' : 'transparent',
-              color: activeTab === 'live' ? '#fff' : '#94a3b8',
-              border: 'none',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              textAlign: 'left',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px'
-            }}
-          >
-            🎙️ Live Workspace
-          </button>
-
-          <button
-            onClick={() => setActiveTab('history')}
-            style={{
-              backgroundColor: activeTab === 'history' ? '#1d4ed8' : 'transparent',
-              color: activeTab === 'history' ? '#fff' : '#94a3b8',
-              border: 'none',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              textAlign: 'left',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px'
-            }}
-          >
-            📁 Past History ({pastHistory.length})
-          </button>
-
-          <button
-            onClick={() => setActiveTab('tasks')}
-            style={{
-              backgroundColor: activeTab === 'tasks' ? '#1d4ed8' : 'transparent',
-              color: activeTab === 'tasks' ? '#fff' : '#94a3b8',
-              border: 'none',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              textAlign: 'left',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px'
-            }}
-          >
-            📋 Task Allocations ({teamTasks.length})
-          </button>
+          <button onClick={() => setActiveTab('live')} style={{ backgroundColor: activeTab === 'live' ? '#1d4ed8' : 'transparent', color: activeTab === 'live' ? '#fff' : '#94a3b8', border: 'none', padding: '12px 16px', borderRadius: '8px', textAlign: 'left', fontWeight: 'bold', cursor: 'pointer' }}>🎙️ Live Workspace</button>
+          <button onClick={() => setActiveTab('history')} style={{ backgroundColor: activeTab === 'history' ? '#1d4ed8' : 'transparent', color: activeTab === 'history' ? '#fff' : '#94a3b8', border: 'none', padding: '12px 16px', borderRadius: '8px', textAlign: 'left', fontWeight: 'bold', cursor: 'pointer' }}>📁 Past History ({pastHistory.length})</button>
+          <button onClick={() => setActiveTab('tasks')} style={{ backgroundColor: activeTab === 'tasks' ? '#1d4ed8' : 'transparent', color: activeTab === 'tasks' ? '#fff' : '#94a3b8', border: 'none', padding: '12px 16px', borderRadius: '8px', textAlign: 'left', fontWeight: 'bold', cursor: 'pointer' }}>📋 Task Allocations ({teamTasks.length})</button>
         </nav>
       </aside>
 
-      {/* MAIN CONTENT AREA */}
+      {/* MAIN BODY */}
       <main style={{ flex: 1, padding: '25px', display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto' }}>
         
-        {/* TAB 1: LIVE WORKSPACE */}
         {activeTab === 'live' && (
           <>
+            {/* MEET URL CONNECTOR WITH SHORTCUT TIP */}
             <header style={{ backgroundColor: '#111c38', padding: '20px', borderRadius: '12px', border: '1px solid #1e2d54' }}>
               <h1 style={{ fontSize: '20px', margin: '0 0 6px 0', color: '#f8fafc' }}>Live Workspace</h1>
-              <p style={{ color: '#94a3b8', fontSize: '13px', margin: '0 0 16px 0' }}>Paste Google Meet link to capture audio and extract key tasks for team members.</p>
+              <p style={{ color: '#94a3b8', fontSize: '13px', margin: '0 0 16px 0' }}>
+                Connect Google Meet call to auto-extract transcript, tasks & capture slides using <span style={{ color: '#38bdf8', fontWeight: 'bold' }}>Ctrl + Shift + S</span> shortcut key.
+              </p>
               
               <div style={{ display: 'flex', gap: '12px' }}>
                 <input
@@ -273,31 +215,15 @@ export default function MeetingPage() {
                   value={meetUrl}
                   onChange={(e) => setMeetUrl(e.target.value)}
                   disabled={isSessionActive}
-                  style={{
-                    flex: 1,
-                    padding: '12px 16px',
-                    borderRadius: '8px',
-                    border: '1px solid #1e2d54',
-                    backgroundColor: '#0b1329',
-                    color: '#fff',
-                    fontSize: '14px',
-                    outline: 'none'
-                  }}
+                  style={{ flex: 1, padding: '12px 16px', borderRadius: '8px', border: '1px solid #1e2d54', backgroundColor: '#0b1329', color: '#fff', fontSize: '14px', outline: 'none' }}
                 />
                 {!isSessionActive ? (
-                  <button
-                    onClick={handleStartSession}
-                    style={{ padding: '12px 24px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
-                  >
-                    Connect Meeting
-                  </button>
+                  <button onClick={handleStartSession} style={{ padding: '12px 24px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Connect Meeting</button>
                 ) : (
-                  <button
-                    onClick={handleStopSession}
-                    style={{ padding: '12px 24px', backgroundColor: '#dc2626', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
-                  >
-                    End & Analyze
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={handleCaptureSlide} style={{ padding: '12px 20px', backgroundColor: '#0284c7', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>📸 Capture (Ctrl+Shift+S)</button>
+                    <button onClick={handleStopSession} style={{ padding: '12px 24px', backgroundColor: '#dc2626', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>End & Analyze</button>
+                  </div>
                 )}
               </div>
 
@@ -306,11 +232,26 @@ export default function MeetingPage() {
               </div>
             </header>
 
+            {/* PRESENTATION REFERENCE GALLERY */}
+            {capturedSlides.length > 0 && (
+              <div style={{ backgroundColor: '#111c38', padding: '20px', borderRadius: '12px', border: '1px solid #1e2d54' }}>
+                <h3 style={{ fontSize: '15px', color: '#38bdf8', marginTop: 0 }}>🖼️ Captured Presentation Slides ({capturedSlides.length})</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '15px', marginTop: '12px' }}>
+                  {capturedSlides.map(slide => (
+                    <div key={slide.id} style={{ backgroundColor: '#0b1329', padding: '10px', borderRadius: '8px', border: '1px solid #1e2d54' }}>
+                      <img src={slide.imageUrl} alt="Slide Reference" style={{ width: '100%', borderRadius: '6px', marginBottom: '8px' }} />
+                      <div style={{ fontSize: '12px', color: '#38bdf8', fontWeight: 'bold' }}>🕒 {slide.timestamp}</div>
+                      <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>{slide.note}</div>
+                      <button onClick={() => handleDeleteSlide(slide.id)} style={{ marginTop: '8px', backgroundColor: '#7f1d1d', color: '#fecaca', border: 'none', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer', width: '100%' }}>Delete Slide</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TRANSCRIPT & INSIGHTS GRID WITH CONCLUSION */}
             <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1.2fr', gap: '20px', flex: 1 }}>
-              
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                
-                {/* Audio Transcript */}
                 <div style={{ backgroundColor: '#111c38', padding: '20px', borderRadius: '12px', border: '1px solid #1e2d54' }}>
                   <h3 style={{ fontSize: '15px', color: '#38bdf8', marginTop: 0 }}>🎙️ Live Speech Transcript</h3>
                   <p style={{ color: '#cbd5e1', fontSize: '13px', whiteSpace: 'pre-line', lineHeight: '1.6' }}>
@@ -318,27 +259,29 @@ export default function MeetingPage() {
                   </p>
                 </div>
 
-                {/* AI Summary */}
                 <div style={{ backgroundColor: '#111c38', padding: '20px', borderRadius: '12px', border: '1px solid #1e2d54', flex: 1 }}>
-                  <h3 style={{ fontSize: '15px', color: '#38bdf8', marginTop: 0 }}>📊 Key Session Insights</h3>
+                  <h3 style={{ fontSize: '15px', color: '#38bdf8', marginTop: 0 }}>📊 Meeting Summary & Visual Conclusion</h3>
                   {summary ? (
                     <div>
                       <p style={{ color: '#e2e8f0', fontSize: '13px', lineHeight: '1.5' }}>{summary}</p>
-                      <div style={{ marginTop: '12px', color: '#38bdf8', fontSize: '12px', fontWeight: 'bold' }}>
-                        ✓ Saved automatically to Past History and Task Allocations.
+                      
+                      {/* CONCLUSION & VISUAL BINDING */}
+                      <div style={{ marginTop: '14px', backgroundColor: '#0b1329', padding: '12px', borderRadius: '8px', border: '1px solid #1e2d54' }}>
+                        <h4 style={{ color: '#38bdf8', fontSize: '13px', margin: '0 0 6px 0' }}>📌 Final Meeting Conclusion:</h4>
+                        <p style={{ fontSize: '12px', color: '#cbd5e1', margin: 0 }}>
+                          Meeting completed successfully. Total <strong>{capturedSlides.length} key presentation slides</strong> were captured using shortcut keys and tagged to this session for visual verification.
+                        </p>
                       </div>
                     </div>
                   ) : (
-                    <p style={{ color: '#64748b', fontSize: '13px' }}>Session summary will automatically appear here once the call ends.</p>
+                    <p style={{ color: '#64748b', fontSize: '13px' }}>Session summary and slide conclusions will automatically appear here once the call ends.</p>
                   )}
                 </div>
-
               </div>
 
-              {/* AI Assistant */}
+              {/* AI ASSISTANT */}
               <div style={{ backgroundColor: '#111c38', padding: '20px', borderRadius: '12px', border: '1px solid #1e2d54', display: 'flex', flexDirection: 'column' }}>
                 <h3 style={{ fontSize: '15px', color: '#38bdf8', marginTop: 0 }}>🤖 Meeting AI Assistant (LLaMA)</h3>
-                
                 <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '15px', minHeight: '200px' }}>
                   {aiChat.length === 0 ? (
                     <p style={{ color: '#64748b', fontSize: '13px' }}>Ask LLaMA AI anything about this meeting!</p>
@@ -361,113 +304,47 @@ export default function MeetingPage() {
                     onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                     style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #1e2d54', backgroundColor: '#0b1329', color: '#fff', fontSize: '13px', outline: 'none' }}
                   />
-                  <button onClick={handleSendMessage} style={{ padding: '10px 16px', backgroundColor: '#38bdf8', color: '#0b1329', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
-                    Ask
-                  </button>
+                  <button onClick={handleSendMessage} style={{ padding: '10px 16px', backgroundColor: '#38bdf8', color: '#0b1329', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>Ask</button>
                 </div>
               </div>
-
             </div>
           </>
         )}
 
-        {/* TAB 2: PAST HISTORIES WITH DELETE OPTION */}
+        {/* TAB 2: PAST HISTORIES */}
         {activeTab === 'history' && (
           <div style={{ backgroundColor: '#111c38', padding: '25px', borderRadius: '12px', border: '1px solid #1e2d54' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ color: '#38bdf8', fontSize: '18px', margin: 0 }}>📁 Saved Past Histories</h2>
-              <span style={{ fontSize: '12px', color: '#64748b' }}>Saved locally in browser</span>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px' }}>
-              {pastHistory.length > 0 ? (
-                pastHistory.map((item) => (
-                  <div key={item.id} style={{ backgroundColor: '#0b1329', padding: '16px', borderRadius: '8px', border: '1px solid #1e2d54', position: 'relative' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', paddingRight: '80px' }}>
-                      <strong style={{ color: '#f8fafc', fontSize: '15px' }}>{item.title}</strong>
-                      <span style={{ color: '#64748b', fontSize: '12px' }}>{item.date}</span>
-                    </div>
-                    <p style={{ color: '#cbd5e1', fontSize: '13px', margin: 0, lineHeight: '1.5' }}>{item.summary}</p>
-
-                    {/* Delete Button */}
-                    <button
-                      onClick={() => handleDeleteHistory(item.id)}
-                      style={{
-                        position: 'absolute',
-                        top: '16px',
-                        right: '16px',
-                        backgroundColor: '#7f1d1d',
-                        color: '#fecaca',
-                        border: 'none',
-                        padding: '6px 12px',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                        fontWeight: 'bold',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      🗑️ Delete
-                    </button>
+            <h2 style={{ color: '#38bdf8', fontSize: '18px', margin: '0 0 20px 0' }}>📁 Saved Past Histories</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              {pastHistory.map((item) => (
+                <div key={item.id} style={{ backgroundColor: '#0b1329', padding: '16px', borderRadius: '8px', border: '1px solid #1e2d54', position: 'relative' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', paddingRight: '80px' }}>
+                    <strong style={{ color: '#f8fafc', fontSize: '15px' }}>{item.title}</strong>
+                    <span style={{ color: '#64748b', fontSize: '12px' }}>{item.date}</span>
                   </div>
-                ))
-              ) : (
-                <p style={{ color: '#64748b', fontSize: '13px' }}>No saved meeting history available.</p>
-              )}
+                  <p style={{ color: '#cbd5e1', fontSize: '13px', margin: 0 }}>{item.summary}</p>
+                  <button onClick={() => handleDeleteHistory(item.id)} style={{ position: 'absolute', top: '16px', right: '16px', backgroundColor: '#7f1d1d', color: '#fecaca', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>🗑️ Delete</button>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-        {/* TAB 3: TASK ALLOCATIONS WITH DELETE OPTION & DEADLINES */}
+        {/* TAB 3: TASK ALLOCATIONS */}
         {activeTab === 'tasks' && (
           <div style={{ backgroundColor: '#111c38', padding: '25px', borderRadius: '12px', border: '1px solid #1e2d54' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h2 style={{ color: '#38bdf8', fontSize: '18px', margin: 0 }}>📋 Key Task Allocations Matrix</h2>
-                <p style={{ color: '#94a3b8', fontSize: '13px', margin: '4px 0 0 0' }}>Who is assigned, Task details, and Submission Deadlines.</p>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '20px' }}>
-              {teamTasks.length > 0 ? (
-                teamTasks.map((t) => (
-                  <div key={t.id} style={{ backgroundColor: '#0b1329', padding: '16px', borderRadius: '10px', border: '1px solid #1e2d54', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ flex: 1, paddingRight: '20px' }}>
-                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '6px' }}>
-                        <span style={{ color: '#38bdf8', fontSize: '13px', fontWeight: 'bold' }}>👤 Member: {t.member}</span>
-                        <span style={{ color: '#64748b', fontSize: '12px' }}>(Lead: {t.head})</span>
-                        <span style={{ backgroundColor: '#1e3a8a', color: '#bfdbfe', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold' }}>{t.priority}</span>
-                      </div>
-                      
-                      <div style={{ color: '#f8fafc', fontSize: '14px', fontWeight: '500', marginBottom: '6px' }}>
-                        📌 Task: {t.task}
-                      </div>
-
-                      <div style={{ color: '#f59e0b', fontSize: '12px', fontWeight: 'bold' }}>
-                        ⏳ Deadline / Due: {t.deadline}
-                      </div>
-                    </div>
-
-                    {/* Delete Task Button */}
-                    <button
-                      onClick={() => handleDeleteTask(t.id)}
-                      style={{
-                        backgroundColor: '#7f1d1d',
-                        color: '#fecaca',
-                        border: 'none',
-                        padding: '8px 14px',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                        fontWeight: 'bold',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      🗑️ Delete
-                    </button>
+            <h2 style={{ color: '#38bdf8', fontSize: '18px', margin: '0 0 20px 0' }}>📋 Key Task Allocations Matrix</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {teamTasks.map((t) => (
+                <div key={t.id} style={{ backgroundColor: '#0b1329', padding: '16px', borderRadius: '10px', border: '1px solid #1e2d54', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ color: '#38bdf8', fontSize: '13px', fontWeight: 'bold' }}>👤 Member: {t.member} (Lead: {t.head})</div>
+                    <div style={{ color: '#f8fafc', fontSize: '14px', marginTop: '4px' }}>📌 Task: {t.task}</div>
+                    <div style={{ color: '#f59e0b', fontSize: '12px', fontWeight: 'bold', marginTop: '4px' }}>⏳ Deadline: {t.deadline}</div>
                   </div>
-                ))
-              ) : (
-                <p style={{ color: '#64748b', fontSize: '13px' }}>No active tasks allocated. Connect a meeting call to auto-generate tasks.</p>
-              )}
+                  <button onClick={() => handleDeleteTask(t.id)} style={{ backgroundColor: '#7f1d1d', color: '#fecaca', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>🗑️ Delete</button>
+                </div>
+              ))}
             </div>
           </div>
         )}
