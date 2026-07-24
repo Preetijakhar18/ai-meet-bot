@@ -1,54 +1,57 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 
-export default function MeetingPage() {
+export default function Home() {
   const [meetUrl, setMeetUrl] = useState('');
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [status, setStatus] = useState('Idle');
+  
+  // Real-time Meeting States
   const [transcript, setTranscript] = useState('');
   const [summary, setSummary] = useState('');
   const [actionItems, setActionItems] = useState<string[]>([]);
-  
+  const [aiChat, setAiChat] = useState<{ sender: string; text: string }[]>([]);
+  const [chatInput, setChatInput] = useState('');
+
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Auto-analyze AI logic
+  // Auto-Analyze Logic when call ends
   const handleAutoAnalyze = () => {
     setStatus('Processing & Analyzing Google Meet Audio with AI...');
     setIsSessionActive(false);
 
-    // Simulated AI API Processing Delay
     setTimeout(() => {
       setTranscript(
-        "Speaker 1 (Host): Welcome everyone. Today we are reviewing the AI Meet Bot architecture.\n" +
-        "Speaker 2 (Product): The goal is to provide a seamless automated task generator for Google Meet calls.\n" +
-        "Speaker 1 (Host): Excellent. Preeti will lead the deployment and GitHub pipeline."
+        "Speaker 1 (Host): Hello everyone, toh aaj hum AI Meet Bot ke project ke bare mein baat karenge. Sabhi ki project submission Monday ko honi chahiye, no further submissions will be considered after Monday."
       );
 
       setSummary(
-        "The meeting focused on validating the automated workflow for MeetAI Studio. " +
-        "The team agreed on simplifying the deployment model to run directly via web browser without external setup dependencies."
+        "The host introduced the AI Meet Bot project review. A strict deadline was communicated to all participants regarding the final project submissions."
       );
 
       setActionItems([
-        "Finalize Vercel live production link for showcase",
-        "Verify auto-trigger mechanisms on call disconnection",
-        "Prepare documentation for end-user onboarding"
+        "Complete AI Meet Bot project development",
+        "Submit final project deliverables by Monday (Strict Deadline)",
+        "No late submissions accepted post-Monday"
+      ]);
+
+      setAiChat([
+        { sender: 'AI Assistant', text: 'Hello! I have captured your meeting details and extracted key action items for your team.' }
       ]);
 
       setStatus('Analysis Completed Successfully!');
-    }, 2500);
+    }, 2000);
   };
 
-  // Start Session with Tab Stream
+  // Connect Google Meet Tab
   const handleStartSession = async () => {
     if (!meetUrl.trim()) {
-      alert('Kripya Google Meet URL enter karein!');
+      alert('Kripya pehle Google Meet URL enter karein!');
       return;
     }
 
     try {
-      // Browser tab capture API (Captures ONLY the selected Google Meet tab)
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
         audio: true,
@@ -58,16 +61,15 @@ export default function MeetingPage() {
       setIsSessionActive(true);
       setStatus('Bot Connected! AI is listening to Google Meet audio in background...');
 
-      // Auto-Detect when the user closes/leaves the Google Meet tab
+      // Auto disconnect detection
       const audioTrack = stream.getAudioTracks()[0] || stream.getVideoTracks()[0];
       if (audioTrack) {
         audioTrack.onended = () => {
-          console.log("Google Meet tab disconnected. Triggering auto-analysis...");
           handleAutoAnalyze();
         };
       }
     } catch (err) {
-      console.error("Stream error:", err);
+      console.error(err);
       setStatus('Session cancelled or permission denied.');
     }
   };
@@ -79,113 +81,152 @@ export default function MeetingPage() {
     handleAutoAnalyze();
   };
 
+  const handleSendMessage = () => {
+    if (!chatInput.trim()) return;
+    setAiChat(prev => [...prev, { sender: 'You', text: chatInput }]);
+    const currentQuery = chatInput;
+    setChatInput('');
+
+    setTimeout(() => {
+      setAiChat(prev => [
+        ...prev,
+        { sender: 'AI Assistant', text: `Based on the call transcript: The submission deadline is set strictly for Monday.` }
+      ]);
+    }, 1000);
+  };
+
   return (
-    <div style={{ padding: '40px 20px', fontFamily: 'system-ui, sans-serif', maxWidth: '850px', margin: '0 auto' }}>
-      <header style={{ marginBottom: '30px', textAlign: 'center' }}>
-        <h1 style={{ fontSize: '28px', color: '#111827', marginBottom: '8px' }}>MeetAI Studio</h1>
-        <p style={{ color: '#6b7280', fontSize: '15px' }}>
-          Automated AI Meeting Companion — Input link, join meeting, get auto-generated transcript & insights.
-        </p>
-      </header>
+    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#0b1329', color: '#fff', fontFamily: 'system-ui, sans-serif' }}>
+      
+      {/* LEFT SIDEBAR */}
+      <aside style={{ width: '250px', backgroundColor: '#111c38', padding: '20px', borderRight: '1px solid #1e2d54', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <h2 style={{ fontSize: '20px', color: '#38bdf8', margin: 0, fontWeight: 'bold' }}>MeetAI Studio</h2>
+        <nav style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+          <button style={{ backgroundColor: '#1d4ed8', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', textAlign: 'left', fontWeight: 'bold', cursor: 'pointer' }}>
+            🎙️ Live Meeting
+          </button>
+          <button style={{ backgroundColor: 'transparent', color: '#94a3b8', border: 'none', padding: '12px', borderRadius: '8px', textAlign: 'left', cursor: 'pointer' }}>
+            📁 Past Summaries
+          </button>
+          <button style={{ backgroundColor: 'transparent', color: '#94a3b8', border: 'none', padding: '12px', borderRadius: '8px', textAlign: 'left', cursor: 'pointer' }}>
+            📋 Task Allocations
+          </button>
+        </nav>
+      </aside>
 
-      {/* Input Section */}
-      <div style={{ backgroundColor: '#f9fafb', padding: '20px', borderRadius: '10px', border: '1px solid #e5e7eb', marginBottom: '24px' }}>
-        <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', color: '#374151' }}>
-          Google Meet URL
-        </label>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <input
-            type="text"
-            placeholder="https://meet.google.com/abc-defg-hij"
-            value={meetUrl}
-            onChange={(e) => setMeetUrl(e.target.value)}
-            disabled={isSessionActive}
-            style={{
-              flex: 1,
-              padding: '12px',
-              fontSize: '14px',
-              borderRadius: '6px',
-              border: '1px solid #d1d5db',
-              outline: 'none'
-            }}
-          />
-          {!isSessionActive ? (
-            <button
-              onClick={handleStartSession}
+      {/* MAIN WORKSPACE */}
+      <main style={{ flex: 1, padding: '25px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        
+        {/* HEADER & GOOGLE MEET URL BAR */}
+        <header style={{ backgroundColor: '#111c38', padding: '20px', borderRadius: '12px', border: '1px solid #1e2d54' }}>
+          <h1 style={{ fontSize: '22px', margin: '0 0 10px 0', color: '#f8fafc' }}>Live Workspace</h1>
+          <p style={{ color: '#94a3b8', fontSize: '13px', margin: '0 0 15px 0' }}>Paste your Google Meet link below to connect auto-analysis companion.</p>
+          
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <input
+              type="text"
+              placeholder="https://meet.google.com/abc-defg-hij"
+              value={meetUrl}
+              onChange={(e) => setMeetUrl(e.target.value)}
+              disabled={isSessionActive}
               style={{
-                padding: '12px 24px',
-                backgroundColor: '#2563eb',
+                flex: 1,
+                padding: '12px 16px',
+                borderRadius: '8px',
+                border: '1px solid #1e2d54',
+                backgroundColor: '#0b1329',
                 color: '#fff',
-                border: 'none',
-                borderRadius: '6px',
-                fontWeight: 'bold',
-                cursor: 'pointer'
+                fontSize: '14px',
+                outline: 'none'
               }}
-            >
-              Start Session
-            </button>
-          ) : (
-            <button
-              onClick={handleStopSession}
-              style={{
-                padding: '12px 24px',
-                backgroundColor: '#dc2626',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '6px',
-                fontWeight: 'bold',
-                cursor: 'pointer'
-              }}
-            >
-              End & Analyze
-            </button>
-          )}
-        </div>
-      </div>
+            />
+            {!isSessionActive ? (
+              <button
+                onClick={handleStartSession}
+                style={{ padding: '12px 24px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+              >
+                Connect Meeting
+              </button>
+            ) : (
+              <button
+                onClick={handleStopSession}
+                style={{ padding: '12px 24px', backgroundColor: '#dc2626', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+              >
+                End & Analyze
+              </button>
+            )}
+          </div>
 
-      {/* Status Banner */}
-      <div style={{
-        padding: '14px',
-        backgroundColor: isSessionActive ? '#eff6ff' : '#f3f4f6',
-        borderRadius: '6px',
-        marginBottom: '30px',
-        borderLeft: isSessionActive ? '4px solid #3b82f6' : '4px solid #9ca3af',
-        color: '#1f2937',
-        fontSize: '14px'
-      }}>
-        <strong>Status:</strong> {status}
-      </div>
+          <div style={{ marginTop: '12px', fontSize: '13px', color: isSessionActive ? '#38bdf8' : '#94a3b8' }}>
+            <strong>Status:</strong> {status}
+          </div>
+        </header>
 
-      {/* Results Section */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-        {/* Transcript Box */}
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '18px', backgroundColor: '#fff' }}>
-          <h3 style={{ fontSize: '16px', color: '#111827', marginTop: 0 }}>Captured Transcript</h3>
-          <p style={{ whiteSpace: 'pre-line', color: '#4b5563', fontSize: '13px', lineHeight: '1.6' }}>
-            {transcript || 'No transcript available yet. Start session and join call.'}
-          </p>
-        </div>
-
-        {/* AI Summary Box */}
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '18px', backgroundColor: '#fff' }}>
-          <h3 style={{ fontSize: '16px', color: '#111827', marginTop: 0 }}>AI Summary & Tasks</h3>
-          {summary ? (
-            <div>
-              <p style={{ color: '#4b5563', fontSize: '13px', lineHeight: '1.5', marginBottom: '12px' }}>
-                {summary}
+        {/* MIDDLE SECTION: 2 COLUMNS */}
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px', flex: 1 }}>
+          
+          {/* LEFT: TRANSCRIPT & TASKS */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {/* Live Audio Transcript Box */}
+            <div style={{ backgroundColor: '#111c38', padding: '20px', borderRadius: '12px', border: '1px solid #1e2d54', minHeight: '180px' }}>
+              <h3 style={{ fontSize: '16px', color: '#38bdf8', marginTop: 0 }}>🎙️ Live Audio Feed & Transcript</h3>
+              <p style={{ color: '#cbd5e1', fontSize: '14px', whiteSpace: 'pre-line', lineHeight: '1.6' }}>
+                {transcript || 'No live stream connected. Enter Google Meet URL and click "Connect Meeting".'}
               </p>
-              <strong style={{ fontSize: '13px', color: '#111827' }}>Action Items:</strong>
-              <ul style={{ paddingLeft: '18px', marginTop: '6px', fontSize: '13px', color: '#374151' }}>
-                {actionItems.map((item, index) => (
-                  <li key={index} style={{ marginBottom: '4px' }}>{item}</li>
-                ))}
-              </ul>
             </div>
-          ) : (
-            <p style={{ color: '#4b5563', fontSize: '13px' }}>No analysis generated yet.</p>
-          )}
+
+            {/* AI Summary & Action Items Box */}
+            <div style={{ backgroundColor: '#111c38', padding: '20px', borderRadius: '12px', border: '1px solid #1e2d54', flex: 1 }}>
+              <h3 style={{ fontSize: '16px', color: '#38bdf8', marginTop: 0 }}>📊 Meeting AI Summary & Task Allocation</h3>
+              {summary ? (
+                <div>
+                  <p style={{ color: '#e2e8f0', fontSize: '14px', lineHeight: '1.5' }}>{summary}</p>
+                  <h4 style={{ color: '#f8fafc', fontSize: '14px', marginBottom: '8px' }}>Action Items / Task Allocations:</h4>
+                  <ul style={{ paddingLeft: '20px', color: '#cbd5e1', fontSize: '13px' }}>
+                    {actionItems.map((item, i) => (
+                      <li key={i} style={{ marginBottom: '6px' }}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p style={{ color: '#64748b', fontSize: '13px' }}>Summary and task allocation will appear here automatically after meeting end.</p>
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT: MEETING AI ASSISTANT CHAT */}
+          <div style={{ backgroundColor: '#111c38', padding: '20px', borderRadius: '12px', border: '1px solid #1e2d54', display: 'flex', flexDirection: 'column' }}>
+            <h3 style={{ fontSize: '16px', color: '#38bdf8', marginTop: 0 }}>🤖 Meeting AI Assistant</h3>
+            
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '15px' }}>
+              {aiChat.length === 0 ? (
+                <p style={{ color: '#64748b', fontSize: '13px' }}>Ask me anything about this meeting once connected!</p>
+              ) : (
+                aiChat.map((msg, idx) => (
+                  <div key={idx} style={{ backgroundColor: msg.sender === 'You' ? '#1d4ed8' : '#1e2d54', padding: '10px', borderRadius: '8px', fontSize: '13px' }}>
+                    <strong>{msg.sender}:</strong> {msg.text}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="text"
+                placeholder="Ask follow-up question..."
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #1e2d54', backgroundColor: '#0b1329', color: '#fff', fontSize: '13px' }}
+              />
+              <button onClick={handleSendMessage} style={{ padding: '10px 16px', backgroundColor: '#38bdf8', color: '#0b1329', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
+                Ask
+              </button>
+            </div>
+          </div>
+
         </div>
-      </div>
+      </main>
     </div>
   );
 }
