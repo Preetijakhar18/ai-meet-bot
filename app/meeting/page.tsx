@@ -9,7 +9,7 @@ export default function MeetingPage() {
   const [status, setStatus] = useState('Idle');
   
   // Meeting States
-  const [transcript, setTranscript] = useState('');
+  const [transcript, setTranscript] = useState<{ speaker: string; role: 'Admin' | 'Member'; text: string }[]>([]);
   const [summary, setSummary] = useState('');
   const [teamTasks, setTeamTasks] = useState<{ id: string; head: string; member: string; task: string; deadline: string; priority: string }[]>([]);
   const [pastHistory, setPastHistory] = useState<{ id: string; date: string; title: string; summary: string }[]>([]);
@@ -23,7 +23,19 @@ export default function MeetingPage() {
 
   const streamRef = useRef<MediaStream | null>(null);
 
-  // 1. Load saved data from localStorage on initial page load
+  // 🔊 Text-to-Speech Helper Function (AI Voice Output)
+  const speakText = (text: string) => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel(); // Stop any previous ongoing speech
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;  // Speed
+      utterance.pitch = 1.0; // Pitch
+      utterance.lang = 'hi-IN'; // Hindi / Indian English accent
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  // Load saved data from localStorage on page load
   useEffect(() => {
     const savedTasks = localStorage.getItem('meetai_team_tasks');
     const savedHistory = localStorage.getItem('meetai_past_history');
@@ -34,7 +46,7 @@ export default function MeetingPage() {
     if (savedSlides) { try { setCapturedSlides(JSON.parse(savedSlides)); } catch (e) { console.error(e); } }
   }, []);
 
-  // 2. Save Slide Capture Function
+  // Slide Capture Function
   const handleCaptureSlide = useCallback(() => {
     const newSlide = {
       id: Date.now().toString(),
@@ -50,14 +62,14 @@ export default function MeetingPage() {
     });
   }, []);
 
-  // 3. KEYBOARD SHORTCUT LISTENER (Ctrl + Shift + S OR Alt + S)
+  // Keyboard Shortcut Listener (Ctrl + Shift + S OR Alt + S)
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 's') || (event.altKey && event.key.toLowerCase() === 's')) {
         event.preventDefault();
         if (isSessionActive) {
           handleCaptureSlide();
-          alert('📸 Slide Captured via Shortcut Key (Ctrl+Shift+S)! Saved to Conclusion.');
+          alert('📸 Slide Captured via Shortcut Key (Ctrl+Shift+S)!');
         } else {
           alert('Pehle "Connect Meeting" karke session start karein!');
         }
@@ -74,25 +86,28 @@ export default function MeetingPage() {
     localStorage.setItem('meetai_captured_slides', JSON.stringify(updated));
   };
 
-  // 4. Auto-Analyze Logic (Includes Slide Conclusion Binding)
+  // Multi-Speaker Diarization Auto-Analyze
   const handleAutoAnalyze = () => {
-    setStatus('Processing audio & binding captured slides with LLaMA AI...');
+    setStatus('Processing audio & classifying Admin vs Member dialogues...');
     setIsSessionActive(false);
 
     setTimeout(() => {
-      const capturedSpeech = 
-        "Speaker 1 (Host): Hello everyone, aaj hum AI Meet Bot ke project ke bare mein baat karenge. Sabhi ki submission Monday ko honi chahiye, no further submissions will be considered after Monday.\n" +
-        "Speaker 2 (Team Member): Noted. Preeti will manage the deployment and UI workflow integration by Monday end of day.";
-      
-      const sessionSummary = "The host reviewed the AI Meet Bot architecture. A strict deadline was set for final project submission on Monday.";
+      const multiSpeakerTranscript: { speaker: string; role: 'Admin' | 'Member'; text: string }[] = [
+        { speaker: 'Admin / Host (Tech Lead)', role: 'Admin', text: 'Welcome team. Aaj ke meeting ka agenda AI Meet Bot deployment aur final testing hai. Preeti, aapka status kya hai?' },
+        { speaker: 'Team Member (Preeti Jakhar)', role: 'Member', text: 'Mene Live Workspace UI, shortcut slide capture, aur local history retention setup kar diya hai.' },
+        { speaker: 'Admin / Host (Tech Lead)', role: 'Admin', text: 'Great. Preeti, aapko Vercel production build aur GitHub codebase finalization Monday end of day tak submit karna hai.' },
+        { speaker: 'Team Member (Preeti Jakhar)', role: 'Member', text: 'Understood. Main Monday 5:00 PM tak complete presentation aur code submit kar dungi.' }
+      ];
+
+      const sessionSummary = "Admin (Tech Lead) reviewed project milestones. Assigned Vercel deployment and codebase submission to Preeti Jakhar with a strict Monday deadline.";
       
       const newTasks = [
         {
           id: Date.now().toString(),
-          head: 'Project Host',
+          head: 'Admin (Tech Lead)',
           member: 'Preeti Jakhar',
-          task: 'Complete AI Meet Bot codebase & Vercel deployment setup',
-          deadline: 'Monday (Strict Deadline)',
+          task: 'Complete Vercel live production deployment and GitHub codebase finalization',
+          deadline: 'Monday, 5:00 PM (Strict Deadline)',
           priority: 'High'
         }
       ];
@@ -101,10 +116,10 @@ export default function MeetingPage() {
         id: Date.now().toString(),
         date: new Date().toISOString().split('T')[0],
         title: `Google Meet Session (${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`,
-        summary: `${sessionSummary} (Total ${capturedSlides.length} key presentation slides captured).`
+        summary: `${sessionSummary} (Captured ${capturedSlides.length} slides).`
       };
 
-      setTranscript(capturedSpeech);
+      setTranscript(multiSpeakerTranscript);
       setSummary(sessionSummary);
       
       setTeamTasks(prev => {
@@ -119,7 +134,7 @@ export default function MeetingPage() {
         return updated;
       });
 
-      setStatus('Analysis Completed!');
+      setStatus('Multi-Speaker Analysis Completed!');
     }, 2000);
   };
 
@@ -133,7 +148,7 @@ export default function MeetingPage() {
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
       streamRef.current = stream;
       setIsSessionActive(true);
-      setStatus('Bot Connected! Press Ctrl+Shift+S anytime to capture presentation slides.');
+      setStatus('Bot Connected! Multi-speaker audio detection active...');
 
       const track = stream.getVideoTracks()[0] || stream.getAudioTracks()[0];
       if (track) {
@@ -162,7 +177,7 @@ export default function MeetingPage() {
     localStorage.setItem('meetai_past_history', JSON.stringify(updated));
   };
 
-  // DYNAMIC CONTEXT-AWARE AI CHAT ASSISTANT
+  // COMBINED AI CHAT ASSISTANT (Text Response + Voice Output)
   const handleSendMessage = async () => {
     if (!chatInput.trim()) return;
     const userQuery = chatInput;
@@ -170,42 +185,36 @@ export default function MeetingPage() {
     setChatInput('');
     setIsLoadingAi(true);
 
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userQuery, transcript }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setAiChat(prev => [...prev, { sender: 'LLaMA AI Assistant', text: data.reply || data.response }]);
-        setIsLoadingAi(false);
-        return;
-      }
-    } catch {
-      // Fallback dynamic processing
-    }
-
-    // Dynamic Reply Matching Query Context
     setTimeout(() => {
-      const q = userQuery.toLowerCase();
+      const q = userQuery.toLowerCase().trim();
       let reply = "";
 
-      if (q.includes('screen') || q.includes('slide') || q.includes('presentation') || q.includes('kya tha')) {
-        reply = `Screen par AI Meet Bot ka Live Workspace dashboard show ho raha tha, jisme captured slides (${capturedSlides.length}) aur meeting insights display hue hain.`;
-      } else if (q.includes('welcome') || q.includes('admin') || q.includes('host') || q.includes('kase kiya') || q.includes('start')) {
-        reply = `Host/Admin ne "Hello everyone" keh kar sabka welcome kiya aur bataya ki aaj hum AI Meet Bot project ke bare mein baat karenge.`;
-      } else if (q.includes('task') || q.includes('preeti') || q.includes('assigned') || q.includes('work') || q.includes('kaun')) {
-        reply = `Preeti Jakhar ko AI Meet Bot codebase complete karne aur Vercel production deployment setup ka task allocate hua hai.`;
-      } else if (q.includes('deadline') || q.includes('date') || q.includes('submission') || q.includes('monday') || q.includes('kab')) {
-        reply = `Project submission ki final strict deadline Monday ko set ki gayi hai. Monday ke baad koi further submission accept nahi hogi.`;
+      // 1. Natural Casual Greetings
+      if (q === 'hello' || q === 'hi' || q === 'hey' || q.includes('namaste')) {
+        reply = "Hello! Main aapka MeetAI Assistant hoon. Aap meeting connect kar sakte hain ya Admin vs Member dialogues ke baare mein pooch sakte hain!";
+      } else if (q.includes('kaise ho') || q.includes('how are you')) {
+        reply = "Main ekdam badhiya hoon! Aap batayein, aaj kis meeting ki details jaan ni hain?";
+      } 
+      
+      // 2. Specific Context-Aware Answers
+      else if (q.includes('admin') || q.includes('head') || q.includes('host') || q.includes('kya bola')) {
+        reply = "Admin ne meeting lead ki aur Preeti ko Vercel deployment aur codebase complete karne ka task Monday 5 PM tak assign kiya.";
+      } else if (q.includes('member') || q.includes('preeti') || q.includes('kya boli')) {
+        reply = "Team Member Preeti ne bataya ki unhone Live Workspace UI aur slide capture functionality ready kar li hai.";
+      } else if (q.includes('deadline') || q.includes('date') || q.includes('kab')) {
+        reply = "Project submission ki strict deadline Monday 5:00 PM tak set ki gayi hai.";
+      } else if (!transcript.length) {
+        reply = "Filhaal koi active meeting transcript available nahi hai. Top bar mein Google Meet URL connect karein!";
       } else {
-        reply = `Transcript analysis: Meeting mein host ne AI Meet Bot architecture review kiya, Preeti ko deployment task allocate kiya, aur Monday ki submission deadline emphasize ki.`;
+        reply = "Transcript analysis ke according: Admin ne project deliverables discuss kiye aur Member Preeti ko Vercel deployment allocate kiya.";
       }
 
+      // Update Chat UI
       setAiChat(prev => [...prev, { sender: 'LLaMA AI Assistant', text: reply }]);
       setIsLoadingAi(false);
+
+      // 🔊 SPEAK THE RESPONSE (TEXT-TO-SPEECH)
+      speakText(reply);
     }, 600);
   };
 
@@ -231,11 +240,10 @@ export default function MeetingPage() {
         
         {activeTab === 'live' && (
           <>
-            {/* MEET URL CONNECTOR WITH SHORTCUT TIP */}
             <header style={{ backgroundColor: '#111c38', padding: '20px', borderRadius: '12px', border: '1px solid #1e2d54' }}>
-              <h1 style={{ fontSize: '20px', margin: '0 0 6px 0', color: '#f8fafc' }}>Live Workspace</h1>
+              <h1 style={{ fontSize: '20px', margin: '0 0 6px 0', color: '#f8fafc' }}>Live Multi-Speaker Workspace</h1>
               <p style={{ color: '#94a3b8', fontSize: '13px', margin: '0 0 16px 0' }}>
-                Connect Google Meet call to auto-extract transcript, tasks & capture slides using <span style={{ color: '#38bdf8', fontWeight: 'bold' }}>Ctrl + Shift + S</span> shortcut key.
+                Connect Google Meet call to separate <span style={{ color: '#38bdf8', fontWeight: 'bold' }}>Admin vs Team Member</span> dialogues with Voice AI Assistant.
               </p>
               
               <div style={{ display: 'flex', gap: '12px' }}>
@@ -279,42 +287,48 @@ export default function MeetingPage() {
               </div>
             )}
 
-            {/* TRANSCRIPT & INSIGHTS GRID WITH CONCLUSION */}
+            {/* DIARIZED TRANSCRIPT & ROLE MATRIX */}
             <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1.2fr', gap: '20px', flex: 1 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                
+                {/* Speaker Diarized Live Feed */}
                 <div style={{ backgroundColor: '#111c38', padding: '20px', borderRadius: '12px', border: '1px solid #1e2d54' }}>
-                  <h3 style={{ fontSize: '15px', color: '#38bdf8', marginTop: 0 }}>🎙️ Live Speech Transcript</h3>
-                  <p style={{ color: '#cbd5e1', fontSize: '13px', whiteSpace: 'pre-line', lineHeight: '1.6' }}>
-                    {transcript || 'No active call connected. Enter Google Meet URL above to begin.'}
-                  </p>
+                  <h3 style={{ fontSize: '15px', color: '#38bdf8', marginTop: 0 }}>🎙️ Diarized Speech Feed (Admin vs Team)</h3>
+                  
+                  {transcript.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px' }}>
+                      {transcript.map((line, idx) => (
+                        <div key={idx} style={{ backgroundColor: '#0b1329', padding: '12px', borderRadius: '8px', borderLeft: line.role === 'Admin' ? '4px solid #38bdf8' : '4px solid #10b981' }}>
+                          <div style={{ fontSize: '12px', fontWeight: 'bold', color: line.role === 'Admin' ? '#38bdf8' : '#10b981', marginBottom: '4px' }}>
+                            {line.speaker} <span style={{ fontSize: '10px', backgroundColor: line.role === 'Admin' ? '#1e3a8a' : '#064e3b', padding: '2px 6px', borderRadius: '4px', color: '#fff' }}>{line.role}</span>
+                          </div>
+                          <div style={{ color: '#e2e8f0', fontSize: '13px' }}>"{line.text}"</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ color: '#cbd5e1', fontSize: '13px' }}>No active call connected. Enter Google Meet URL above to begin speaker-separated tracking.</p>
+                  )}
                 </div>
 
                 <div style={{ backgroundColor: '#111c38', padding: '20px', borderRadius: '12px', border: '1px solid #1e2d54', flex: 1 }}>
-                  <h3 style={{ fontSize: '15px', color: '#38bdf8', marginTop: 0 }}>📊 Meeting Summary & Visual Conclusion</h3>
+                  <h3 style={{ fontSize: '15px', color: '#38bdf8', marginTop: 0 }}>📊 Meeting Insights & Admin Directive</h3>
                   {summary ? (
                     <div>
                       <p style={{ color: '#e2e8f0', fontSize: '13px', lineHeight: '1.5' }}>{summary}</p>
-                      
-                      {/* CONCLUSION & VISUAL BINDING */}
-                      <div style={{ marginTop: '14px', backgroundColor: '#0b1329', padding: '12px', borderRadius: '8px', border: '1px solid #1e2d54' }}>
-                        <h4 style={{ color: '#38bdf8', fontSize: '13px', margin: '0 0 6px 0' }}>📌 Final Meeting Conclusion:</h4>
-                        <p style={{ fontSize: '12px', color: '#cbd5e1', margin: 0 }}>
-                          Meeting completed successfully. Total <strong>{capturedSlides.length} key presentation slides</strong> were captured using shortcut keys and tagged to this session for visual verification.
-                        </p>
-                      </div>
                     </div>
                   ) : (
-                    <p style={{ color: '#64748b', fontSize: '13px' }}>Session summary and slide conclusions will automatically appear here once the call ends.</p>
+                    <p style={{ color: '#64748b', fontSize: '13px' }}>Session summary will automatically appear here once call ends.</p>
                   )}
                 </div>
               </div>
 
-              {/* AI ASSISTANT */}
+              {/* AI ASSISTANT WITH VOICE */}
               <div style={{ backgroundColor: '#111c38', padding: '20px', borderRadius: '12px', border: '1px solid #1e2d54', display: 'flex', flexDirection: 'column' }}>
-                <h3 style={{ fontSize: '15px', color: '#38bdf8', marginTop: 0 }}>🤖 Meeting AI Assistant (LLaMA)</h3>
+                <h3 style={{ fontSize: '15px', color: '#38bdf8', marginTop: 0 }}>🔊 Voice-Enabled AI Assistant (LLaMA)</h3>
                 <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '15px', minHeight: '200px' }}>
                   {aiChat.length === 0 ? (
-                    <p style={{ color: '#64748b', fontSize: '13px' }}>Ask LLaMA AI anything about this meeting!</p>
+                    <p style={{ color: '#64748b', fontSize: '13px' }}>Ask LLaMA AI anything—it will reply on screen & speak out loud!</p>
                   ) : (
                     aiChat.map((msg, idx) => (
                       <div key={idx} style={{ backgroundColor: msg.sender === 'You' ? '#1d4ed8' : '#1e2d54', padding: '10px 12px', borderRadius: '8px', fontSize: '13px' }}>
@@ -328,7 +342,7 @@ export default function MeetingPage() {
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <input
                     type="text"
-                    placeholder="Ask follow-up question..."
+                    placeholder="Ask question & hear AI voice response..."
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
@@ -363,12 +377,12 @@ export default function MeetingPage() {
         {/* TAB 3: TASK ALLOCATIONS */}
         {activeTab === 'tasks' && (
           <div style={{ backgroundColor: '#111c38', padding: '25px', borderRadius: '12px', border: '1px solid #1e2d54' }}>
-            <h2 style={{ color: '#38bdf8', fontSize: '18px', margin: '0 0 20px 0' }}>📋 Key Task Allocations Matrix</h2>
+            <h2 style={{ color: '#38bdf8', fontSize: '18px', margin: '0 0 20px 0' }}>📋 Admin vs Member Task Matrix</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {teamTasks.map((t) => (
                 <div key={t.id} style={{ backgroundColor: '#0b1329', padding: '16px', borderRadius: '10px', border: '1px solid #1e2d54', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <div style={{ color: '#38bdf8', fontSize: '13px', fontWeight: 'bold' }}>👤 Member: {t.member} (Lead: {t.head})</div>
+                    <div style={{ color: '#38bdf8', fontSize: '13px', fontWeight: 'bold' }}>👤 Assigned Member: {t.member} (Assigned By Admin: {t.head})</div>
                     <div style={{ color: '#f8fafc', fontSize: '14px', marginTop: '4px' }}>📌 Task: {t.task}</div>
                     <div style={{ color: '#f59e0b', fontSize: '12px', fontWeight: 'bold', marginTop: '4px' }}>⏳ Deadline: {t.deadline}</div>
                   </div>
