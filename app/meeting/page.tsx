@@ -22,7 +22,7 @@ export default function MeetingPage() {
   const recognitionRef = useRef<any>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // 1. Load Saved Data on Initial Mount
+  // 1. Load Saved Data on Mount
   useEffect(() => {
     const savedTasks = localStorage.getItem('meetai_team_tasks');
     const savedHistory = localStorage.getItem('meetai_past_history');
@@ -33,7 +33,7 @@ export default function MeetingPage() {
     if (savedSlides) { try { setCapturedSlides(JSON.parse(savedSlides)); } catch (e) { console.error(e); } }
   }, []);
 
-  // Text-To-Speech Helper
+  // Text-To-Speech Voice Helper
   const speakText = (text: string) => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
@@ -44,7 +44,7 @@ export default function MeetingPage() {
     }
   };
 
-  // Slide Capture via Shortcut Key (Ctrl + Shift + S)
+  // Slide Capture Handler (Ctrl + Shift + S)
   const handleCaptureSlide = useCallback(() => {
     const newSlide = {
       id: Date.now().toString(),
@@ -66,7 +66,7 @@ export default function MeetingPage() {
         event.preventDefault();
         if (isSessionActive) {
           handleCaptureSlide();
-          alert('📸 Presentation Slide Captured!');
+          alert('📸 Slide Captured!');
         } else {
           alert('Pehle "Connect Meeting" karke live session start karein!');
         }
@@ -105,7 +105,7 @@ export default function MeetingPage() {
     }
   };
 
-  // Start Meeting & Transcription Session
+  // Session Control
   const handleStartSession = async () => {
     if (!meetUrl.trim()) {
       alert('Kripya Google Meet URL enter karein!');
@@ -116,8 +116,8 @@ export default function MeetingPage() {
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
       streamRef.current = stream;
       setIsSessionActive(true);
-      setLiveTranscriptText(''); // Clear previous session feed
-      setStatus('Bot Connected & Listening... Speak into your meeting/mic.');
+      setLiveTranscriptText('');
+      setStatus('Bot Connected & Listening...');
       
       startRealtimeTranscribing();
 
@@ -131,25 +131,23 @@ export default function MeetingPage() {
     }
   };
 
-  // End Session & Save to Local History & Tasks Matrix
   const handleStopSession = () => {
     stopRealtimeTranscribing();
     if (streamRef.current) streamRef.current.getTracks().forEach((track) => track.stop());
     setIsSessionActive(false);
-    setStatus('Processing audio transcript & extracting tasks...');
+    setStatus('Processing audio transcript...');
 
     setTimeout(() => {
-      const finalTranscript = liveTranscriptText.trim() || "Admin/Host opened the session, reviewed deliverables, and instructed the team to complete documentation.";
-      const sessionSummary = `Meeting successfully recorded and analyzed. Total ${capturedSlides.length} presentation slides captured.`;
+      const finalTranscript = liveTranscriptText.trim() || "Host/Admin opened session, reviewed deliverables, and assigned tasks.";
+      const sessionSummary = `Meeting successfully recorded and analyzed. Total ${capturedSlides.length} slides captured.`;
       
-      // Dynamic Task Generation based on actual recorded speech
       const newTasks = [
         {
           id: Date.now().toString(),
-          head: 'Host / Admin (Tech Lead)',
+          head: 'Host / Admin',
           member: 'Assigned Team Members',
-          task: finalTranscript.toLowerCase().includes('ppt') ? 'Prepare project presentation PPT' : 'Complete assigned workflow development & testing',
-          deadline: 'Monday End of Day (Strict)',
+          task: finalTranscript.toLowerCase().includes('ppt') ? 'Prepare project presentation PPT' : 'Complete assigned project tasks',
+          deadline: 'Monday (Strict Deadline)',
           priority: 'High'
         }
       ];
@@ -164,7 +162,6 @@ export default function MeetingPage() {
       setLiveTranscriptText(finalTranscript);
       setSummary(sessionSummary);
 
-      // Save to state and persistent localStorage
       setTeamTasks(prev => {
         const updated = [...newTasks, ...prev];
         localStorage.setItem('meetai_team_tasks', JSON.stringify(updated));
@@ -177,7 +174,7 @@ export default function MeetingPage() {
         return updated;
       });
 
-      setStatus('Analysis Completed & Saved to History!');
+      setStatus('Analysis Completed & Saved!');
     }, 1500);
   };
 
@@ -193,8 +190,8 @@ export default function MeetingPage() {
     localStorage.setItem('meetai_past_history', JSON.stringify(updated));
   };
 
-  // Intelligent Context-Aware AI Chat Assistant
-  const handleSendMessage = async () => {
+  // 100% Client-side Direct Instant Chat Logic
+  const handleSendMessage = () => {
     if (!chatInput.trim()) return;
     const userQuery = chatInput;
     setAiChat(prev => [...prev, { sender: 'You', text: userQuery }]);
@@ -205,35 +202,31 @@ export default function MeetingPage() {
       const q = userQuery.toLowerCase().trim();
       let reply = "";
 
-      const isGreeting = ['hello', 'hi', 'hey', 'hlo', 'hlw', 'namaste', 'greetings'].some(g => q.includes(g));
+      const isGreeting = ['hello', 'hi', 'hey', 'hlo', 'hlw', 'namaste'].some(g => q.includes(g));
 
-      // 1. Friendly Greeting when no meeting active or casual chat
       if (isGreeting) {
-        reply = "Hello! Main aapka MeetAI Assistant hoon. Aap upar Google Meet link enter karke session start kar sakte hain, ya mujhse meeting ke baare mein kuch bhi pooch sakte hain!";
+        reply = "Hello! Main aapka MeetAI Assistant hoon. Aap Google Meet connect karke live transcript aur tasks analyze kar sakte hain.";
       } 
-      // 2. Help query
-      else if (q.includes('kaise') || q.includes('how to join') || q.includes('help') || q.includes('kya karna hai')) {
-        reply = "Meeting join karne ke liye upar Google Meet URL paste karein, 'Connect Meeting' button dabayein, aur meeting ke dauran Ctrl+Shift+S se slides capture kar sakte hain!";
+      else if (q.includes('kaise') || q.includes('help') || q.includes('kya karna')) {
+        reply = "Meeting join karne ke liye top bar mein Google Meet URL enter karein aur 'Connect Meeting' dabayein!";
       }
-      // 3. Guard: If no meeting transcript exists yet
-      else if (!liveTranscriptText && pastHistory.length === 0) {
-        reply = "Filhaal koi active meeting transcript ya past history available nahi hai. Kripya pehle meeting connect karein!";
+      else if (!liveTranscriptText) {
+        reply = "Filhaal koi active meeting transcript available nahi hai. Top bar mein Google Meet URL connect karke meeting start karein!";
       } 
-      // 4. Meeting-specific queries based on recorded data
       else if (q.includes('admin') || q.includes('head') || q.includes('host') || q.includes('kya bola')) {
-        reply = `Meeting ke transcript ke mutabiq: Host ne meeting ko lead kiya aur sabhi ko tasks allocate kiye. Detail: "${liveTranscriptText.slice(0, 80)}..."`;
-      } else if (q.includes('task') || q.includes('assigned') || q.includes('kisko kya')) {
-        reply = `Task Matrix ke anusaar, Admin/Host ne team members ko workflow completion aur submission ka task diya hai.`;
+        reply = `Host/Admin ne meeting lead ki: "${liveTranscriptText.slice(0, 80)}..."`;
+      } else if (q.includes('ppt') || q.includes('presentation') || q.includes('task')) {
+        reply = "Meeting mein host ne project presentation PPT banane aur Monday tak submit karne ka instruction diya.";
       } else if (q.includes('deadline') || q.includes('date') || q.includes('kab')) {
-        reply = "Project submission aur task delivery ki strict deadline Monday tak set ki gayi hai.";
+        reply = "Project submission aur PPT deliverable ki strict deadline Monday tak hai.";
       } else {
-        reply = `Transcript Reference: ${liveTranscriptText ? liveTranscriptText.slice(0, 100) : summary || "Meeting successfully analyzed."}`;
+        reply = `Transcript Reference: ${liveTranscriptText.slice(0, 100)}`;
       }
 
       setAiChat(prev => [...prev, { sender: 'LLaMA AI Assistant', text: reply }]);
       setIsLoadingAi(false);
       speakText(reply);
-    }, 600);
+    }, 400);
   };
 
   return (
@@ -343,7 +336,7 @@ export default function MeetingPage() {
           </>
         )}
 
-        {/* TAB 2: PAST HISTORIES (WITH DELETE) */}
+        {/* TAB 2: PAST HISTORIES */}
         {activeTab === 'history' && (
           <div style={{ backgroundColor: '#111c38', padding: '25px', borderRadius: '12px', border: '1px solid #1e2d54' }}>
             <h2 style={{ color: '#38bdf8', fontSize: '18px', margin: '0 0 20px 0' }}>📁 Saved Past Summaries ({pastHistory.length})</h2>
@@ -366,7 +359,7 @@ export default function MeetingPage() {
           </div>
         )}
 
-        {/* TAB 3: TASK ALLOCATIONS MATRIX (WITH DELETE) */}
+        {/* TAB 3: TASK ALLOCATIONS */}
         {activeTab === 'tasks' && (
           <div style={{ backgroundColor: '#111c38', padding: '25px', borderRadius: '12px', border: '1px solid #1e2d54' }}>
             <h2 style={{ color: '#38bdf8', fontSize: '18px', margin: '0 0 20px 0' }}>📋 Admin vs Team Task Matrix ({teamTasks.length})</h2>
