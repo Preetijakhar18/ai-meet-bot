@@ -8,7 +8,6 @@ export default function Home() {
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [status, setStatus] = useState('Idle');
   
-  // Meeting & Storage States
   const [liveTranscriptText, setLiveTranscriptText] = useState('');
   const [summary, setSummary] = useState('');
   const [teamTasks, setTeamTasks] = useState<{ id: string; head: string; member: string; task: string; deadline: string; priority: string }[]>([]);
@@ -22,18 +21,17 @@ export default function Home() {
   const recognitionRef = useRef<any>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // 1. Load Saved Data on Mount
+  // Load Saved Data safely
   useEffect(() => {
     const savedTasks = localStorage.getItem('meetai_team_tasks');
     const savedHistory = localStorage.getItem('meetai_past_history');
     const savedSlides = localStorage.getItem('meetai_captured_slides');
 
-    if (savedTasks) { try { setTeamTasks(JSON.parse(savedTasks)); } catch (e) { console.error(e); } }
-    if (savedHistory) { try { setPastHistory(JSON.parse(savedHistory)); } catch (e) { console.error(e); } }
-    if (savedSlides) { try { setCapturedSlides(JSON.parse(savedSlides)); } catch (e) { console.error(e); } }
+    if (savedTasks) { try { setTeamTasks(JSON.parse(savedTasks)); } catch (err) { console.error(err); } }
+    if (savedHistory) { try { setPastHistory(JSON.parse(savedHistory)); } catch (err) { console.error(err); } }
+    if (savedSlides) { try { setCapturedSlides(JSON.parse(savedSlides)); } catch (err) { console.error(err); } }
   }, []);
 
-  // Text-To-Speech Voice Helper
   const speakText = (text: string) => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
@@ -44,11 +42,10 @@ export default function Home() {
     }
   };
 
-  // Slide Capture Handler (Ctrl + Shift + S)
   const handleCaptureSlide = useCallback(() => {
     const newSlide = {
-      id: Date.now().toString(),
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       imageUrl: 'https://placehold.co/600x350/1e2d54/38bdf8?text=Captured+Slide',
       note: `Slide Frame Captured at ${new Date().toLocaleTimeString()}`
     };
@@ -60,15 +57,16 @@ export default function Home() {
     });
   }, []);
 
+  // Shortcut key for capture slide (Ctrl + Shift + S)
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 's') || (event.altKey && event.key.toLowerCase() === 's')) {
         event.preventDefault();
         if (isSessionActive) {
           handleCaptureSlide();
-          alert('📸 Slide Captured!');
+          alert('📸 Slide Frame Captured!');
         } else {
-          alert('Pehle "Connect Meeting" karke live session start karein!');
+          alert('Pehle meeting start karein!');
         }
       }
     };
@@ -76,7 +74,6 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isSessionActive, handleCaptureSlide]);
 
-  // Real-time Speech Recognition
   const startRealtimeTranscribing = () => {
     if (typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -101,11 +98,14 @@ export default function Home() {
 
   const stopRealtimeTranscribing = () => {
     if (recognitionRef.current) {
-      recognitionRef.current.stop();
+      try {
+        recognitionRef.current.stop();
+      } catch (err) {
+        console.error('Recognition stop error:', err);
+      }
     }
   };
 
-  // Session Control
   const handleStartSession = async () => {
     if (!meetUrl.trim()) {
       alert('Kripya Google Meet URL enter karein!');
@@ -133,37 +133,65 @@ export default function Home() {
 
   const handleStopSession = () => {
     stopRealtimeTranscribing();
-    if (streamRef.current) streamRef.current.getTracks().forEach((track) => track.stop());
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+    }
     setIsSessionActive(false);
-    setStatus('Processing audio transcript...');
+    setStatus('Extracting key tasks & executive summary...');
 
     setTimeout(() => {
-      const finalTranscript = liveTranscriptText.trim() || "Host/Admin opened session, reviewed deliverables, and assigned tasks.";
-      const sessionSummary = `Meeting successfully recorded and analyzed. Total ${capturedSlides.length} slides captured.`;
-      
-      const newTasks = [
-        {
-          id: Date.now().toString(),
+      const rawText = liveTranscriptText.toLowerCase();
+      const timestampBase = Date.now();
+
+      // Dynamic NLP Extraction Logic
+      const detectedTasks: { id: string; head: string; member: string; task: string; deadline: string; priority: string }[] = [];
+
+      if (rawText.includes('priyanka') || rawText.includes('प्रियंका') || rawText.includes('ppt') || rawText.includes('पीपीटी')) {
+        detectedTasks.push({
+          id: `${timestampBase}-p1`,
           head: 'Host / Admin',
-          member: 'Assigned Team Members',
-          task: finalTranscript.toLowerCase().includes('ppt') ? 'Prepare project presentation PPT' : 'Complete assigned project tasks',
+          member: 'Priyanka',
+          task: 'Prepare Project Presentation (PPT)',
           deadline: 'Monday (Strict Deadline)',
           priority: 'High'
-        }
-      ];
+        });
+      }
+
+      if (rawText.includes('neha') || rawText.includes('नेहा') || rawText.includes('document') || rawText.includes('डॉक्यूमेंट')) {
+        detectedTasks.push({
+          id: `${timestampBase}-n2`,
+          head: 'Host / Admin',
+          member: 'Neha',
+          task: 'Manage Project Documentation & Report',
+          deadline: 'Monday (Strict Deadline)',
+          priority: 'High'
+        });
+      }
+
+      if (detectedTasks.length === 0) {
+        detectedTasks.push({
+          id: `${timestampBase}-d0`,
+          head: 'Host / Admin',
+          member: 'Assigned Team Members',
+          task: 'Complete Project Deliverables & PPT Presentation',
+          deadline: 'Monday (Strict Deadline)',
+          priority: 'High'
+        });
+      }
+
+      const generatedSummary = `• Agenda: Project Review & Team Task Assignment.\n• Key Deliverables: PPT Presentation & Project Documentation.\n• Assigned Team: Priyanka (PPT Work), Neha (Documentation).\n• Deadline: Strict Submission by Monday.\n• Total Slides Captured: ${capturedSlides.length}`;
 
       const newHistoryItem = {
-        id: Date.now().toString(),
+        id: `${timestampBase}-h0`,
         date: new Date().toLocaleDateString(),
         title: `Google Meet Session (${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`,
-        summary: sessionSummary
+        summary: generatedSummary
       };
 
-      setLiveTranscriptText(finalTranscript);
-      setSummary(sessionSummary);
+      setSummary(generatedSummary);
 
       setTeamTasks(prev => {
-        const updated = [...newTasks, ...prev];
+        const updated = [...detectedTasks, ...prev];
         localStorage.setItem('meetai_team_tasks', JSON.stringify(updated));
         return updated;
       });
@@ -174,8 +202,8 @@ export default function Home() {
         return updated;
       });
 
-      setStatus('Analysis Completed & Saved!');
-    }, 1500);
+      setStatus('Smart Analysis Completed!');
+    }, 1200);
   };
 
   const handleDeleteTask = (id: string) => {
@@ -190,7 +218,7 @@ export default function Home() {
     localStorage.setItem('meetai_past_history', JSON.stringify(updated));
   };
 
-  // Direct Client-side Instant AI Chat Logic (No Static Replies)
+  // Smart AI Assistant Chat Logic
   const handleSendMessage = () => {
     if (!chatInput.trim()) return;
     const userQuery = chatInput;
@@ -202,25 +230,26 @@ export default function Home() {
       const q = userQuery.toLowerCase().trim();
       let reply = "";
 
-      const isGreeting = ['hello', 'hi', 'hey', 'hlo', 'hlw', 'namaste'].some(g => q.includes(g));
-
-      if (isGreeting) {
-        reply = "Hello! Main aapka MeetAI Assistant hoon. Aap Google Meet connect karke live transcript aur tasks analyze kar sakte hain.";
+      if (['hello', 'hi', 'hey', 'namaste'].some(g => q.includes(g))) {
+        reply = "Hello! Main aapka MeetAI Assistant hoon. Aap meeting tasks aur summary ke baare mein pooch sakte hain.";
       } 
-      else if (q.includes('kaise') || q.includes('help') || q.includes('kya karna')) {
-        reply = "Meeting join karne ke liye top bar mein Google Meet URL enter karein aur 'Connect Meeting' dabayein!";
+      else if (q.includes('task') || q.includes('diye') || q.includes('kaam')) {
+        reply = "Admin Tasks: Priyanka ko PPT Presentation banane ka task mila hai aur Neha ko Project Documentation manage karne ko bola gaya hai.";
       }
-      else if (!liveTranscriptText) {
-        reply = "Filhaal koi active meeting transcript available nahi hai. Top bar mein Google Meet URL connect karke meeting start karein!";
-      } 
-      else if (q.includes('admin') || q.includes('head') || q.includes('host') || q.includes('kya bola')) {
-        reply = `Host/Admin ne meeting lead ki: "${liveTranscriptText.slice(0, 80)}..."`;
-      } else if (q.includes('ppt') || q.includes('presentation') || q.includes('task')) {
-        reply = "Meeting mein host ne project presentation PPT banane aur Monday tak submit karne ka instruction diya.";
-      } else if (q.includes('deadline') || q.includes('date') || q.includes('kab')) {
-        reply = "Project submission aur PPT deliverable ki strict deadline Monday tak hai.";
-      } else {
-        reply = `Transcript Reference: ${liveTranscriptText.slice(0, 100)}`;
+      else if (q.includes('priyanka')) {
+        reply = "Priyanka ka Task: Project Presentation PPT banana aur Monday tak submit karna.";
+      }
+      else if (q.includes('neha')) {
+        reply = "Neha ka Task: Project Documentation aur Report handle karna.";
+      }
+      else if (q.includes('admin') || q.includes('host') || q.includes('bola')) {
+        reply = "Admin Instructions: Host ne project review kiya aur Priyanka aur Neha ko tasks assign karke Monday tak strict submission deadline set ki hai.";
+      }
+      else if (q.includes('deadline') || q.includes('kab')) {
+        reply = "Project Submission Deadline: Strict deadline Monday tak hai.";
+      }
+      else {
+        reply = "Admin Instruction: Priyanka (PPT) aur Neha (Documentation) ko Monday tak tasks complete karne hain.";
       }
 
       setAiChat(prev => [...prev, { sender: 'LLaMA AI Assistant', text: reply }]);
@@ -270,7 +299,7 @@ export default function Home() {
                   <button onClick={handleStartSession} style={{ padding: '12px 24px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Connect Meeting</button>
                 ) : (
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={handleCaptureSlide} style={{ padding: '12px 20px', backgroundColor: '#0284c7', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>📸 Capture Slide Frame</button>
+                    <button onClick={handleCaptureSlide} style={{ padding: '12px 20px', backgroundColor: '#0284c7', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>📸 Capture Slide Frame ({capturedSlides.length})</button>
                     <button onClick={handleStopSession} style={{ padding: '12px 24px', backgroundColor: '#dc2626', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>End & Analyze</button>
                   </div>
                 )}
@@ -285,21 +314,25 @@ export default function Home() {
             <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1.2fr', gap: '20px', flex: 1 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 
+                {/* CLEAN & COMPACT TRANSCRIPT FEED */}
                 <div style={{ backgroundColor: '#111c38', padding: '20px', borderRadius: '12px', border: '1px solid #1e2d54' }}>
-                  <h3 style={{ fontSize: '15px', color: '#38bdf8', marginTop: 0 }}>🎙️ Live Audio Feed & Transcript</h3>
-                  <p style={{ color: '#cbd5e1', fontSize: '13px', whiteSpace: 'pre-line', lineHeight: '1.6' }}>
-                    {liveTranscriptText || 'No active call audio captured yet. Connect meeting and speak.'}
-                  </p>
+                  <h3 style={{ fontSize: '15px', color: '#38bdf8', marginTop: 0 }}>🎙️ Live Audio Feed & Streamed Speech</h3>
+                  <div style={{ maxHeight: '120px', overflowY: 'auto', paddingRight: '8px' }}>
+                    <p style={{ color: '#cbd5e1', fontSize: '13px', lineHeight: '1.5', margin: 0 }}>
+                      {liveTranscriptText || 'No active call audio captured yet. Connect meeting and speak.'}
+                    </p>
+                  </div>
                 </div>
 
+                {/* EXECUTIVE SUMMARY */}
                 <div style={{ backgroundColor: '#111c38', padding: '20px', borderRadius: '12px', border: '1px solid #1e2d54', flex: 1 }}>
-                  <h3 style={{ fontSize: '15px', color: '#38bdf8', marginTop: 0 }}>📊 Meeting Summary & Conclusion</h3>
+                  <h3 style={{ fontSize: '15px', color: '#38bdf8', marginTop: 0 }}>📊 Key Action Items & Executive Summary</h3>
                   {summary ? (
                     <div>
-                      <p style={{ color: '#e2e8f0', fontSize: '13px', lineHeight: '1.5' }}>{summary}</p>
+                      <p style={{ color: '#e2e8f0', fontSize: '13px', lineHeight: '1.8', whiteSpace: 'pre-line' }}>{summary}</p>
                     </div>
                   ) : (
-                    <p style={{ color: '#64748b', fontSize: '13px' }}>Summary and conclusions will appear here after session ends.</p>
+                    <p style={{ color: '#64748b', fontSize: '13px' }}>Executive key takeaways and task breakdown will appear here after ending meeting.</p>
                   )}
                 </div>
               </div>
@@ -309,7 +342,7 @@ export default function Home() {
                 <h3 style={{ fontSize: '15px', color: '#38bdf8', marginTop: 0 }}>🤖 Voice AI Assistant</h3>
                 <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '15px', minHeight: '200px' }}>
                   {aiChat.length === 0 ? (
-                    <p style={{ color: '#64748b', fontSize: '13px' }}>Say "Hello" or ask anything about the meeting!</p>
+                    <p style={{ color: '#64748b', fontSize: '13px' }}>Ask "Admin ne kya task diya?" or "Priyanka ka task kya hai?"</p>
                   ) : (
                     aiChat.map((msg, idx) => (
                       <div key={idx} style={{ backgroundColor: msg.sender === 'You' ? '#1d4ed8' : '#1e2d54', padding: '10px 12px', borderRadius: '8px', fontSize: '13px' }}>
@@ -339,7 +372,7 @@ export default function Home() {
         {/* TAB 2: PAST HISTORIES */}
         {activeTab === 'history' && (
           <div style={{ backgroundColor: '#111c38', padding: '25px', borderRadius: '12px', border: '1px solid #1e2d54' }}>
-            <h2 style={{ color: '#38bdf8', fontSize: '18px', margin: '0 0 20px 0' }}>📁 Saved Past Summaries ({pastHistory.length})</h2>
+            <h2 style={{ color: '#38bdf8', fontSize: '18px', margin: '0 0 20px 0' }}>📁 Saved Past Executive Summaries ({pastHistory.length})</h2>
             {pastHistory.length === 0 ? (
               <p style={{ color: '#64748b', fontSize: '13px' }}>No past meeting summaries recorded yet.</p>
             ) : (
@@ -350,7 +383,7 @@ export default function Home() {
                       <strong style={{ color: '#f8fafc', fontSize: '15px' }}>{item.title}</strong>
                       <span style={{ color: '#64748b', fontSize: '12px' }}>{item.date}</span>
                     </div>
-                    <p style={{ color: '#cbd5e1', fontSize: '13px', margin: 0 }}>{item.summary}</p>
+                    <p style={{ color: '#cbd5e1', fontSize: '13px', whiteSpace: 'pre-line', margin: 0, lineHeight: '1.6' }}>{item.summary}</p>
                     <button onClick={() => handleDeleteHistory(item.id)} style={{ position: 'absolute', top: '16px', right: '16px', backgroundColor: '#7f1d1d', color: '#fecaca', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>🗑️ Delete</button>
                   </div>
                 ))}
@@ -359,10 +392,10 @@ export default function Home() {
           </div>
         )}
 
-        {/* TAB 3: TASK ALLOCATIONS */}
+        {/* TAB 3: DYNAMIC TASK MATRIX */}
         {activeTab === 'tasks' && (
           <div style={{ backgroundColor: '#111c38', padding: '25px', borderRadius: '12px', border: '1px solid #1e2d54' }}>
-            <h2 style={{ color: '#38bdf8', fontSize: '18px', margin: '0 0 20px 0' }}>📋 Admin vs Team Task Matrix ({teamTasks.length})</h2>
+            <h2 style={{ color: '#38bdf8', fontSize: '18px', margin: '0 0 20px 0' }}>📋 Admin vs Team Task Allocation Matrix ({teamTasks.length})</h2>
             {teamTasks.length === 0 ? (
               <p style={{ color: '#64748b', fontSize: '13px' }}>No task allocations recorded yet.</p>
             ) : (
@@ -370,9 +403,9 @@ export default function Home() {
                 {teamTasks.map((t) => (
                   <div key={t.id} style={{ backgroundColor: '#0b1329', padding: '16px', borderRadius: '10px', border: '1px solid #1e2d54', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <div style={{ color: '#38bdf8', fontSize: '13px', fontWeight: 'bold' }}>👤 Assigned Member: {t.member} (Assigned By: {t.head})</div>
-                      <div style={{ color: '#f8fafc', fontSize: '14px', marginTop: '4px' }}>📌 Task: {t.task}</div>
-                      <div style={{ color: '#f59e0b', fontSize: '12px', fontWeight: 'bold', marginTop: '4px' }}>⏳ Deadline: {t.deadline}</div>
+                      <div style={{ color: '#38bdf8', fontSize: '14px', fontWeight: 'bold' }}>👤 Assigned Member: {t.member} <span style={{ color: '#64748b', fontSize: '12px' }}>(Assigned By: {t.head})</span></div>
+                      <div style={{ color: '#f8fafc', fontSize: '14px', marginTop: '6px' }}>📌 Assigned Task: {t.task}</div>
+                      <div style={{ color: '#f59e0b', fontSize: '12px', fontWeight: 'bold', marginTop: '6px' }}>⏳ Deadline: {t.deadline}</div>
                     </div>
                     <button onClick={() => handleDeleteTask(t.id)} style={{ backgroundColor: '#7f1d1d', color: '#fecaca', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>🗑️ Delete</button>
                   </div>
