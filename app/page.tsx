@@ -185,8 +185,11 @@ export default function Home() {
         });
       }
 
-      const cleanTranscriptSummary = liveTranscriptText.replace(/(हेलो|हेलो हेलो|क्या मेरी आवाज|आवाज आ रही है)+/g, '').trim();
-      const generatedSummary = `• Meeting Audio Summary: "${cleanTranscriptSummary.slice(0, 150)}..."\n• Key Takeaway: Assigned tasks extracted from discussion.\n• Total Slides Captured: ${capturedSlides.length}`;
+      const cleanTranscriptSummary = liveTranscriptText
+  .replace(/(hello|hey team|am i audible|can you hear me)+/gi, '')
+  .trim() || liveTranscriptText.trim();
+
+const generatedSummary = `• Meeting Summary: "${cleanTranscriptSummary.slice(0, 140)}..."\n• Key Takeaways: Team action items & tasks extracted from live discussion.\n• Total Slides Captured: ${capturedSlides.length}`;
 
       const newHistoryItem = {
         id: `${timestampBase}-h0`,
