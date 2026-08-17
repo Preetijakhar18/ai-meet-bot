@@ -37,7 +37,7 @@ export default function Home() {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.0;
-      utterance.lang = 'hi-IN';
+      utterance.lang = 'en-US';
       window.speechSynthesis.speak(utterance);
     }
   };
@@ -79,7 +79,7 @@ export default function Home() {
       recognitionRef.current = new SpeechRecognition();
       recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
-      recognitionRef.current.lang = 'hi-IN';
+      recognitionRef.current.lang = 'en-US';
 
       recognitionRef.current.onresult = (event: any) => {
         let transcriptChunk = '';
